@@ -11,17 +11,39 @@
 #include "llvm/Frontend/OpenMP/OMPConstants.h"
 #include "llvm/Frontend/OpenMP/OMPIRBuilder.h"
 #include "llvm/IR/DebugInfo.h"
+#include "llvm/IR/InstIterator.h"
 #include "llvm/IR/LegacyPassManager.h"
 #include "llvm/IR/Verifier.h"
+#include "llvm/Pass.h"
 #include "llvm/Passes/PassBuilder.h"
 #include "llvm/Passes/PassPlugin.h"
 #include "llvm/Support/raw_ostream.h"
-#include "llvm/IR/InstIterator.h"
-#include "llvm/ExecutionEngine/Orc/IndirectionUtils.h"
-#include "llvm/Pass.h"
 
 using namespace llvm;
 using namespace omp;
+
+static cl::opt<std::string>
+    KernelEntryFunctionName("amdgpu-kernel-entry-function-name",
+                         cl::desc("Set AMDGPU attributes for this kernel entry function."),
+                         cl::Hidden, cl::init(""));
+
+static cl::opt<std::string>
+    FlatWorkGroupSize("amdgpu-flat-work-group-size",
+                         cl::desc("Set AMDGPU flat work group size attribute."),
+                         cl::Hidden, cl::init(""));
+
+static cl::opt<std::string>
+    NumSGPR("amdgpu-num-sgpr", cl::desc("Set AMDGPU Num SGPR attribute."),
+               cl::Hidden, cl::init(""));
+
+static cl::opt<std::string>
+    NumVGPR("amdgpu-num-vgpr", cl::desc("Set AMDGPU Num VGPR attribute."),
+               cl::Hidden, cl::init(""));
+
+static cl::opt<std::string>
+    WavesPerEU("amdgpu-waves-per-eu",
+                  cl::desc("Set AMDGPU waves per EU attribute."), cl::Hidden,
+                  cl::init(""));
 
 //-----------------------------------------------------------------------------
 // AMDGPUAttributePass implementation
@@ -37,39 +59,60 @@ void visitor(Module &M) {
 
   SmallPtrSet<Function *, 8> KernelEntryFunctions;
 
-  auto IsKernelEntry = [&](Function &F) {
-    FunctionCallee KernelInit = OMPBuilder.getOrCreateRuntimeFunction(M, OMPRTL___kmpc_target_init);
-    FunctionCallee KernelDeinit = OMPBuilder.getOrCreateRuntimeFunction(M, OMPRTL___kmpc_target_deinit);
+  auto CollectKernelEntryFunctions = [&](Module &M) {
+    FunctionCallee TargetInit =
+        OMPBuilder.getOrCreateRuntimeFunction(M, OMPRTL___kmpc_target_init);
+    FunctionCallee TargetDeinit =
+        OMPBuilder.getOrCreateRuntimeFunction(M, OMPRTL___kmpc_target_deinit);
 
-    bool CallsTargetInit = false;
-    bool CallsTargetDeinit = false;
+    for (Function &F : M) {
+      bool CallsTargetInit = false;
+      bool CallsTargetDeinit = false;
 
-    for(Use &U : KernelInit.getCallee()->uses())
-      if(auto *I = dyn_cast<Instruction>(U.getUser()))
-        if(I->getFunction() == &F) {
-          CallsTargetInit = true;
-          break;
-        }
+      for (Use &U : TargetInit.getCallee()->uses())
+        if (auto *I = dyn_cast<Instruction>(U.getUser()))
+          if (I->getFunction() == &F) {
+            CallsTargetInit = true;
+            break;
+          }
 
-    for(Use &U : KernelDeinit.getCallee()->uses())
-      if(Instruction *I = dyn_cast<Instruction>(U.getUser()))
-        if(I->getFunction() == &F) {
-          CallsTargetDeinit = true;
-          break;
-        }
+      for (Use &U : TargetDeinit.getCallee()->uses())
+        if (Instruction *I = dyn_cast<Instruction>(U.getUser()))
+          if (I->getFunction() == &F) {
+            CallsTargetDeinit = true;
+            break;
+          }
 
-    return (CallsTargetInit && CallsTargetDeinit);
-  };
-  
-  for(Function &F : M) 
-    if(IsKernelEntry(F))
+      if (!CallsTargetInit || !CallsTargetDeinit)
+        continue;
+
       KernelEntryFunctions.insert(&F);
+    }
+  };
 
-  for(Function *F : KernelEntryFunctions) {
+  CollectKernelEntryFunctions(M);
+
+  auto CheckAndSetAttribute = [](Function &F, StringRef AttrKind, StringRef AttrVal) {
+    if(AttrVal.empty())
+      return;
+
+    outs() << "Set Attribute " << AttrKind << " => " << AttrVal << "\n";
+    F.addFnAttr(AttrKind, AttrVal);
+  };
+
+  for (Function *F : KernelEntryFunctions) {
+    if (!KernelEntryFunctionName.empty() &&
+        F->getName() != KernelEntryFunctionName) {
+      outs() << "Skip " << F->getName() << "\n";
+      continue;
+    }
+
     outs() << "Kernel entry function " << F->getName() << "\n";
-    F->addFnAttr();
+    CheckAndSetAttribute(*F, FlatWorkGroupSize.ArgStr, FlatWorkGroupSize);
+    CheckAndSetAttribute(*F, NumSGPR.ArgStr, NumSGPR);
+    CheckAndSetAttribute(*F, NumVGPR.ArgStr, NumVGPR);
+    CheckAndSetAttribute(*F, WavesPerEU.ArgStr, WavesPerEU);
   }
-    
 }
 
 // New PM implementation
@@ -80,7 +123,7 @@ struct AMDGPUAttributePass : PassInfoMixin<AMDGPUAttributePass> {
     visitor(M);
     // TODO: is anything preserved?
     return PreservedAnalyses::none();
-    //return PreservedAnalyses::all();
+    // return PreservedAnalyses::all();
   }
 
   // Without isRequired returning true, this pass will be skipped for functions
@@ -100,7 +143,7 @@ struct LegacyAMDGPUAttributePass : public ModulePass {
     // TODO: what is preserved?
     return true;
     // Doesn't modify the input unit of IR, hence 'false'
-    //return false;
+    // return false;
   }
 };
 } // namespace
@@ -110,25 +153,21 @@ struct LegacyAMDGPUAttributePass : public ModulePass {
 //-----------------------------------------------------------------------------
 llvm::PassPluginLibraryInfo getAMDGPUAttributePassPluginInfo() {
   const auto callback = [](PassBuilder &PB) {
-    // TODO: decide where to insert it in the pipeline. Early avoids
-    // inlining jit function (which disables jit'ing) but may require more
-    // optimization, hence overhead, at runtime.
     PB.registerPipelineStartEPCallback([&](ModulePassManager &MPM, auto) {
-    //PB.registerPipelineEarlySimplificationEPCallback([&](ModulePassManager &MPM, auto) {
-    // XXX: LastEP can break jit'ing, jit function is inlined!
-    //PB.registerOptimizerLastEPCallback([&](ModulePassManager &MPM, auto) {
+      // PB.registerPipelineEarlySimplificationEPCallback([&](ModulePassManager
+      // &MPM, auto) {
       MPM.addPass(AMDGPUAttributePass());
       return true;
     });
   };
 
-  return {LLVM_PLUGIN_API_VERSION, "AMDGPUAttributePass", LLVM_VERSION_STRING, callback};
+  return {LLVM_PLUGIN_API_VERSION, "AMDGPUAttributePass", LLVM_VERSION_STRING,
+          callback};
 }
 
-// TODO: use by jit-pass name.
-// This is the core interface for pass plugins. It guarantees that 'opt' will
-// be able to recognize AMDGPUAttributePass when added to the pass pipeline on the
-// command line, i.e. via '-passes=jit-pass'
+// TODO: This is the core interface for pass plugins. It guarantees that 'opt'
+// will be able to recognize AMDGPUAttributePass when added to the pass pipeline
+// on the command line, i.e., via '-passes=this-pass'
 extern "C" LLVM_ATTRIBUTE_WEAK ::llvm::PassPluginLibraryInfo
 llvmGetPassPluginInfo() {
   return getAMDGPUAttributePassPluginInfo();
@@ -142,10 +181,10 @@ llvmGetPassPluginInfo() {
 char LegacyAMDGPUAttributePass::ID = 0;
 
 // This is the core interface for pass plugins. It guarantees that 'opt' will
-// recognize LegacyAMDGPUAttributePass when added to the pass pipeline on the command
-// line, i.e.  via '--legacy-jit-pass'
+// recognize LegacyAMDGPUAttributePass when added to the pass pipeline on the
+// command line, i.e.  via '--legacy-amdgpuattribute-pass'
 static RegisterPass<LegacyAMDGPUAttributePass>
     X("legacy-amdgpuattribute-pass", "AMDGPU Attribute Pass",
       false, // This pass doesn't modify the CFG => false
-      false // This pass is not a pure analysis pass => false
+      false  // This pass is not a pure analysis pass => false
     );
