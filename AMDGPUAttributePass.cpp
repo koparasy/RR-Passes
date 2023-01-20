@@ -23,25 +23,25 @@ using namespace llvm;
 using namespace omp;
 
 static cl::opt<std::string>
-    KernelEntryFunctionName("amdgpu-kernel-entry-function-name",
+    KernelEntryFunctionNameOpt("amdgpu-kernel-entry-function-name",
                          cl::desc("Set AMDGPU attributes for this kernel entry function."),
                          cl::Hidden, cl::init(""));
 
 static cl::opt<std::string>
-    FlatWorkGroupSize("amdgpu-flat-work-group-size",
+    FlatWorkGroupSizeOpt("amdgpu-flat-work-group-size",
                          cl::desc("Set AMDGPU flat work group size attribute."),
                          cl::Hidden, cl::init(""));
 
 static cl::opt<std::string>
-    NumSGPR("amdgpu-num-sgpr", cl::desc("Set AMDGPU Num SGPR attribute."),
+    NumSGPROpt("amdgpu-num-sgpr", cl::desc("Set AMDGPU Num SGPR attribute."),
                cl::Hidden, cl::init(""));
 
 static cl::opt<std::string>
-    NumVGPR("amdgpu-num-vgpr", cl::desc("Set AMDGPU Num VGPR attribute."),
+    NumVGPROpt("amdgpu-num-vgpr", cl::desc("Set AMDGPU Num VGPR attribute."),
                cl::Hidden, cl::init(""));
 
 static cl::opt<std::string>
-    WavesPerEU("amdgpu-waves-per-eu",
+    WavesPerEUOpt("amdgpu-waves-per-eu",
                   cl::desc("Set AMDGPU waves per EU attribute."), cl::Hidden,
                   cl::init(""));
 
@@ -51,6 +51,17 @@ static cl::opt<std::string>
 // No need to expose the internals of the pass to the outside world - keep
 // everything in an anonymous namespace.
 namespace {
+
+struct EnvVarOpt {
+  std::string OptVal;
+  std::string OptKind;
+
+  EnvVarOpt(const StringRef EnvVarName, StringRef OptKindIn)
+      : OptKind(OptKindIn) {
+    char *EnvVal = std::getenv(EnvVarName.str().c_str());
+    OptVal = (EnvVal ? EnvVal : "");
+  }
+};
 
 // This method implements what the pass does
 void visitor(Module &M) {
@@ -92,8 +103,16 @@ void visitor(Module &M) {
 
   CollectKernelEntryFunctions(M);
 
-  auto CheckAndSetAttribute = [](Function &F, StringRef AttrKind, StringRef AttrVal) {
-    if(AttrVal.empty())
+  EnvVarOpt KernelEntryFunctionName("AMDGPU_KERNEL_ENTRY_FUNCTION_NAME", "");
+  EnvVarOpt FlatWorkGroupSize("AMDGPU_FLAT_WORK_GROUP_SIZE",
+                              "amdgpu-flat-work-group-size");
+  EnvVarOpt NumSGPR("AMDGPU_NUM_SGPR", "amdgpu-num-sgpr");
+  EnvVarOpt NumVGPR("AMDGPU_NUM_VGPR", "amdgpu-num-vgpr");
+  EnvVarOpt WavesPerEU("AMDGPU_WAVES_PER_EU", "amdgpu-waves-per-eu");
+
+  auto CheckAndSetAttribute = [](Function &F, StringRef AttrKind,
+                                 StringRef AttrVal) {
+    if (AttrVal.empty())
       return;
 
     outs() << "Set Attribute " << AttrKind << " => " << AttrVal << "\n";
@@ -101,17 +120,17 @@ void visitor(Module &M) {
   };
 
   for (Function *F : KernelEntryFunctions) {
-    if (!KernelEntryFunctionName.empty() &&
-        F->getName() != KernelEntryFunctionName) {
+    if (!KernelEntryFunctionName.OptVal.empty() &&
+        F->getName() != KernelEntryFunctionName.OptVal) {
       outs() << "Skip " << F->getName() << "\n";
       continue;
     }
 
     outs() << "Kernel entry function " << F->getName() << "\n";
-    CheckAndSetAttribute(*F, FlatWorkGroupSize.ArgStr, FlatWorkGroupSize);
-    CheckAndSetAttribute(*F, NumSGPR.ArgStr, NumSGPR);
-    CheckAndSetAttribute(*F, NumVGPR.ArgStr, NumVGPR);
-    CheckAndSetAttribute(*F, WavesPerEU.ArgStr, WavesPerEU);
+    CheckAndSetAttribute(*F, FlatWorkGroupSize.OptKind, FlatWorkGroupSize.OptVal);
+    CheckAndSetAttribute(*F, NumSGPR.OptKind, NumSGPR.OptVal);
+    CheckAndSetAttribute(*F, NumVGPR.OptKind, NumVGPR.OptVal);
+    CheckAndSetAttribute(*F, WavesPerEU.OptKind, WavesPerEU.OptVal);
   }
 }
 
