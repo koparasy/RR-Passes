@@ -69,9 +69,9 @@ void visitor(Module &M) {
   OpenMPIRBuilder OMPBuilder(M);
   OMPBuilder.initialize();
 
-  SmallPtrSet<Function *, 8> KernelEntryFunctions;
-  KernelSet KS = getDeviceKernels(M);
+  KernelSet KernelEntryFunctions = getDeviceKernels(M);
 
+#if 0
   auto CollectKernelEntryFunctions = [&](Module &M) {
     FunctionCallee TargetInit =
         OMPBuilder.getOrCreateRuntimeFunction(M, OMPRTL___kmpc_target_init);
@@ -104,6 +104,7 @@ void visitor(Module &M) {
   };
 
   CollectKernelEntryFunctions(M);
+  #endif
 
   EnvVarOpt KernelEntryFunctionName("AMDGPU_KERNEL_ENTRY_FUNCTION_NAME", "");
   EnvVarOpt FlatWorkGroupSize("AMDGPU_FLAT_WORK_GROUP_SIZE",
@@ -122,6 +123,7 @@ void visitor(Module &M) {
   };
 
   for (Function *F : KernelEntryFunctions) {
+    outs() << "Found Function " << F->getName() ,< "\n";
     if (!KernelEntryFunctionName.OptVal.empty() &&
         F->getName() != KernelEntryFunctionName.OptVal) {
       outs() << "Skip " << F->getName() << "\n";
