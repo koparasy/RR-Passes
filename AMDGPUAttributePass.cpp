@@ -18,6 +18,7 @@
 #include "llvm/Passes/PassBuilder.h"
 #include "llvm/Passes/PassPlugin.h"
 #include "llvm/Support/raw_ostream.h"
+#include "llvm/Transforms/OpenMPOpt.h"
 
 using namespace llvm;
 using namespace omp;
@@ -69,6 +70,7 @@ void visitor(Module &M) {
   OMPBuilder.initialize();
 
   SmallPtrSet<Function *, 8> KernelEntryFunctions;
+  KernelSet KS = getDeviceKernels(M);
 
   auto CollectKernelEntryFunctions = [&](Module &M) {
     FunctionCallee TargetInit =
