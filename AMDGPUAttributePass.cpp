@@ -18,7 +18,7 @@
 #include "llvm/Passes/PassBuilder.h"
 #include "llvm/Passes/PassPlugin.h"
 #include "llvm/Support/raw_ostream.h"
-#include "llvm/Transforms/OpenMPOpt.h"
+#include "llvm/Transforms/IPO/OpenMPOpt.h"
 
 using namespace llvm;
 using namespace omp;
