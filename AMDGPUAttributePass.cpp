@@ -131,6 +131,12 @@ void visitor(Module &M) {
     }
 
     outs() << "Kernel entry function " << F->getName() << "\n";
+    // Use command-line options.
+    CheckAndSetAttribute(*F, FlatWorkGroupSize.ArgStr, FlatWorkGroupSize);
+    CheckAndSetAttribute(*F, NumSGPR.ArgStr, NumSGPR);
+    CheckAndSetAttribute(*F, NumVGPR.ArgStr, NumVGPR);
+    CheckAndSetAttribute(*F, WavesPerEU.ArgStr, WavesPerEU);
+    // Use env vars.
     CheckAndSetAttribute(*F, FlatWorkGroupSize.OptKind, FlatWorkGroupSize.OptVal);
     CheckAndSetAttribute(*F, NumSGPR.OptKind, NumSGPR.OptVal);
     CheckAndSetAttribute(*F, NumVGPR.OptKind, NumVGPR.OptVal);
