@@ -123,7 +123,7 @@ void visitor(Module &M) {
   };
 
   for (Function *F : KernelEntryFunctions) {
-    outs() << "Found Function " << F->getName() ,< "\n";
+    outs() << "Found Function " << F->getName() << "\n";
     if (!KernelEntryFunctionName.OptVal.empty() &&
         F->getName() != KernelEntryFunctionName.OptVal) {
       outs() << "Skip " << F->getName() << "\n";
