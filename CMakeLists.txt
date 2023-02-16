@@ -31,9 +31,9 @@ endif()
 #===============================================================================
 # 3. ADD THE TARGET
 #===============================================================================
-add_library(AMDGPUAttributePass SHARED AMDGPUAttributePass.cpp)
+add_library(TuneDevice SHARED AMD/AMDGPUAttributePass.cpp NVPTX/NVPTXTuningDirectives.cpp)
 
 # Allow undefined symbols in shared objects on Darwin (this is the default
 # behaviour on Linux)
-target_link_libraries(AMDGPUAttributePass
+target_link_libraries(TuneDevice
   "$<$<PLATFORM_ID:Darwin>:-undefined dynamic_lookup>")
