@@ -65,13 +65,14 @@ struct NVPTXTuneParams {
 void visitor(Module &M) {
   OpenMPIRBuilder OMPBuilder(M);
   OMPBuilder.initialize();
+  outs() << "I AM HERE\n";
 
   KernelSet KernelEntryFunctions = getDeviceKernels(M);
   SmallVector<NVPTXTuneParams, 4> TuneParams = {
     NVPTXTuneParams("maxnreg", "MAX_REGISTERS", MaxRegister),
-    NVPTXTuneParams("maxntid", "MAX_THREADS", MaxThreads),
+    NVPTXTuneParams("maxntidx", "MAX_THREADS", MaxThreads),
     NVPTXTuneParams("reqntid", "REQUEST_THREADS", ReqThreads),
-    NVPTXTuneParams("minnctapersm", "MIN_BLOCKS", MinBlocks)
+    NVPTXTuneParams("minctasm", "MIN_BLOCKS", MinBlocks)
   };
 
   llvm::NamedMDNode *MD = M.getOrInsertNamedMetadata("nvvm.annotations");
