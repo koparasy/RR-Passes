@@ -31,7 +31,7 @@ endif()
 #===============================================================================
 # 3. ADD THE TARGET
 #===============================================================================
-add_library(TuneDevice SHARED AMD/AMDGPUAttributePass.cpp NVPTX/NVPTXTuningDirectives.cpp)
+add_library(TuneDevice SHARED AMD/AMDGPUAttributePass.cpp NVPTX/NVPTXTuningDirectives.cpp NVPTX/GlobalSymbolRename.cpp)
 
 # Allow undefined symbols in shared objects on Darwin (this is the default
 # behaviour on Linux)
