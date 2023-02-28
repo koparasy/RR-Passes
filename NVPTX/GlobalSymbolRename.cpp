@@ -47,7 +47,6 @@ void visitor(Module &M) {
       continue;
 
     std::replace( Name.begin(), Name.end(), '.', '_');
-    dbgs()  << "Name Before:" << F.getName() << "After : " << Name << "\n";
     F.setName(Name);
   }
 }
