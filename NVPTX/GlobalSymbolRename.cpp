@@ -31,10 +31,24 @@ namespace {
 void visitor(Module &M) {
   for (auto &Global : M.getGlobalList()){
     auto Name = Global.getGlobalIdentifier();
-    if ( Name.find(".") != std::string::npos ){
-      std::replace( Name.begin(), Name.end(), '.', '_');
-      Global.setName(Name);
-    }
+    if ( Name.find(".") == std::string::npos  )
+      continue;
+
+    std::replace( Name.begin(), Name.end(), '.', '_');
+    Global.setName(Name);
+  }
+
+  for ( auto &F : M ){
+    if ( F.isIntrinsic() )
+      continue;
+
+    std::string Name(F.getName());
+    if ( Name.find(".") == std::string::npos  )
+      continue;
+
+    std::replace( Name.begin(), Name.end(), '.', '_');
+    dbgs()  << "Name Before:" << F.getName() << "After : " << Name << "\n";
+    F.setName(Name);
   }
 }
 
